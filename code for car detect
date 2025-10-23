@@ -1,0 +1,64 @@
+
+import cv2
+from ultralytics import YOLO
+import easyocr
+
+# Load the YOLOv8 model (pre-trained for general object detection)
+model = YOLO("yolov8n.pt")  # Replace with your specific model file
+
+# Load the EasyOCR reader
+reader = easyocr.Reader(['en'])
+
+# Load the video
+video_path = "carlicense.mp4"  # Replace with your video path
+cap = cv2.VideoCapture(video_path)
+
+# Get video properties
+fps = cap.get(cv2.CAP_PROP_FPS)
+width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+# Define the output video writer
+output_path = "output_license_plate_detection1.mp4"
+fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Video codec for mp4
+out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+
+# Process each frame of the video
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break  # Break when the video ends
+
+    # Run object detection on the frame using YOLO
+    results = model(frame)
+
+    # Extract detections (boxes) for all objects detected
+    for result in results:
+        boxes = result.boxes
+        for box in boxes:
+            x1, y1, x2, y2 = map(int, box.xyxy[0])  # Get coordinates of bounding box
+            label = model.names[int(box.cls[0])]  # Object class name
+
+            # Check if the detected object is a "car" or something resembling a license plate
+            if label == 'car':  # You can adjust this for better accuracy with a car detector
+                # Crop the detected license plate area (if YOLO detects a license plate)
+                license_plate_crop = frame[y1:y2, x1:x2]
+
+                # Use EasyOCR to extract text from the cropped license plate image
+                ocr_result = reader.readtext(license_plate_crop)
+
+                # Print the detected text (license plate number)
+                for text in ocr_result:
+                    print("Detected License Plate: ", text[1])
+                    # Draw a rectangle around the detected license plate
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    cv2.putText(frame, text[1], (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 0), 2)
+
+    # Write the processed frame to the output video file
+    out.write(frame)
+
+# Release video capture and writer objects
+cap.release()
+out.release()
+
+print(f"✅ Output video saved as: {output_path}")
